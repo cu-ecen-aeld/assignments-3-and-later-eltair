@@ -1,13 +1,16 @@
 #!/bin/bash
 
+# save parameters
 filesdir=$1
 searchstr=$2
 
+# validate parameters
 if [ -z "$filesdir" ] || [ -z "$searchstr" ]; then
 	echo "Usage: ./finder.sh <filesdir> <searchstr>"
 	exit 1
 fi
 
+# check for valid directory
 if [ ! -d "$filesdir" ]; then
 	echo "Directory $filesdir does not exist!"
 	exit 1
