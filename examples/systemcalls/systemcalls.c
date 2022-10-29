@@ -1,5 +1,14 @@
 #include "systemcalls.h"
 
+#include <errno.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
 /**
  * @param cmd the command to execute with system()
  * @return true if the command in @param cmd was executed
@@ -16,8 +25,56 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
+    {
+        int ret = system(cmd);
+        if(ret != 0) return false;
+    }
 
     return true;
+}
+
+bool my_exec(int count, char *command[], const char *outputfile) {
+    pid_t pid = fork();
+
+    if (pid > 0) { // parent
+        int stat = 0;
+        if(wait(&stat) == pid) {
+            if(WIFEXITED(stat)) {
+                int status = WEXITSTATUS(stat);
+                if(status == 0) {
+                    return true;
+                }
+            }
+        }
+    } else if (pid == 0) { // child
+        // print debugging info
+        for(int i=0; i < count; i++) {
+            fprintf(stderr, "CHILD: command[%d]=%s\n", i, command[i]);
+        }
+
+        if(outputfile) {
+            fprintf(stderr, "Opening output file: %s\n", outputfile);
+            int out_fd = creat(outputfile, 0644);
+            if(out_fd) {
+                fprintf(stderr, "%s", "Redirecting standard output\n");
+                dup2(out_fd, STDOUT_FILENO); // set stdout to file for redirection
+                close(out_fd);
+            } else {
+                fprintf(stderr, "Failed to open file: %s", outputfile);
+                exit(1);
+            }
+        }
+
+        // run the command
+        execv(command[0], command);
+
+        // execv should not return if it's successful.
+        // print error and exit if it does return
+        fprintf(stderr, "CHILDERROR: %s\n", strerror(errno));
+        exit(1);
+    }
+
+    return false;
 }
 
 /**
@@ -39,29 +96,19 @@ bool do_exec(int count, ...)
     va_list args;
     va_start(args, count);
     char * command[count+1];
+    bool result = false;
     int i;
     for(i=0; i<count; i++)
     {
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
 
-/*
- * TODO:
- *   Execute a system command by calling fork, execv(),
- *   and wait instead of system (see LSP page 161).
- *   Use the command[0] as the full path to the command to execute
- *   (first argument to execv), and use the remaining arguments
- *   as second argument to the execv() command.
- *
-*/
+    result = my_exec(count, command, NULL);
 
     va_end(args);
 
-    return true;
+    return result;
 }
 
 /**
@@ -74,26 +121,17 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     va_list args;
     va_start(args, count);
     char * command[count+1];
+    bool result = false;
     int i;
     for(i=0; i<count; i++)
     {
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
-
-
-/*
- * TODO
- *   Call execv, but first using https://stackoverflow.com/a/13784315/1446624 as a refernce,
- *   redirect standard out to a file specified by outputfile.
- *   The rest of the behaviour is same as do_exec()
- *
-*/
+ 
+    result = my_exec(count, command, outputfile);
 
     va_end(args);
 
-    return true;
+    return result;
 }
