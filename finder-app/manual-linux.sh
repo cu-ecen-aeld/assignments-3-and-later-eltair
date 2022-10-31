@@ -73,10 +73,8 @@ else
 fi
 
 # TODO: Make and install busybox
-sudo make ARCH=$ARCH CROSS_COMPILE=aarch64-linux-gnu-
-sudo make CONFIG_PREFIX=${OUTDIR}/rootfs ARCH=$ARCH CROSS_COMPILE=aarch64-linux-gnu- install
-#sudo make ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE
-#sudo make CONFIG_PREFIX=${OUTDIR}/rootfs ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE install
+sudo bash -c "PATH=$PATH make ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE"
+sudo bash -c "PATH=$PATH make CONFIG_PREFIX=${OUTDIR}/rootfs ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE install"
 
 echo "Library dependencies"
 cd ${OUTDIR}/rootfs
