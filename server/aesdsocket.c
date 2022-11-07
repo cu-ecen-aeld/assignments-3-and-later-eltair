@@ -60,6 +60,9 @@ int main(int argc, char *argv[])
 	sigaction(SIGINT, &new_action, NULL);
 	sigaction(SIGTERM, &new_action, NULL);
 
+	memset(&client, 0, sizeof(client));
+	memset(&client_addrlen, 0, sizeof(client_addrlen));
+
 	// initialize addr hints
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_UNSPEC;
@@ -79,6 +82,11 @@ int main(int argc, char *argv[])
 	// bind to the port
 	if ((status = bind(sock, serverinfo->ai_addr, serverinfo->ai_addrlen)) != 0)
 		err();
+
+	// this is a really lazy way to handle the daemon option but it meets the spec ;)
+	if (argc == 2 && strcmp(argv[1], "-d") == 0 && fork()) {
+		exit(0);
+	}
 
 	// open the socket for listening
 	listen(sock, 1);
