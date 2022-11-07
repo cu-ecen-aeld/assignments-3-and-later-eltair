@@ -11,14 +11,15 @@
 #include <syslog.h>
 #include <unistd.h>
 
+const int BUF_SIZE = 1024;
 const char *OUT_FILE = "/var/tmp/aesdsocketdata";
 
 int sock = 0;
-int fd = 0;
+int conn_fd = 0;
 ssize_t count = 0;
 struct addrinfo *serverinfo = NULL;
-FILE *f_out = NULL; // open output file
-FILE *f_fd = NULL;	// open socket for buffered reading
+FILE *f_out = NULL;	 // open output file
+FILE *f_sock = NULL; // open socket for buffered reading
 
 static void err()
 {
@@ -29,10 +30,10 @@ static void err()
 static void clean_up(int sig_num)
 {
 	syslog(LOG_INFO, "%s\n", "Caught signal, exiting");
-	if (f_fd)
-		fclose(f_fd);
-	if (fd)
-		close(fd);
+	if (f_sock)
+		fclose(f_sock);
+	if (conn_fd)
+		close(conn_fd);
 	if (f_out)
 		fclose(f_out);
 	if (sock)
@@ -51,6 +52,7 @@ int main(int argc, char *argv[])
 	socklen_t client_addrlen;
 	const int reuse_enable = 1;
 
+	// set up signal handler to catch SIGINT and SIGTERM and exit gracefully
 	struct sigaction new_action;
 	new_action.sa_handler = clean_up;
 	new_action.sa_flags = 0;
@@ -81,33 +83,49 @@ int main(int argc, char *argv[])
 	// open the socket for listening
 	listen(sock, 1);
 
-	f_out = fopen(OUT_FILE, "wb"); // open output file
 	while (1)
 	{
-		fd = accept(sock, &client, &client_addrlen);
-		if (fd)
+		conn_fd = accept(sock, &client, &client_addrlen);
+		if (conn_fd)
 		{
-			char *buf = NULL;
+			char *line = NULL;
 			size_t len = 0;
+
+			// log IP address
 			struct sockaddr_in *addr_in = (struct sockaddr_in *)&client;
 			syslog(LOG_INFO, "Accepted connection from %s\n", inet_ntoa(addr_in->sin_addr));
-			f_fd = fdopen(fd, "rb"); // open socket for buffered reading
 
-			if (f_fd)
+			// open socket connection stream for buffered reading
+			f_sock = fdopen(conn_fd, "rb");
+
+			if (f_sock)
 			{
-				if ((count = getline(&buf, &len, f_fd)) != -1)
+				if ((count = getline(&line, &len, f_sock)) != -1)
 				{
-					printf("%s", buf);
-					fputs(buf, f_out);
-					fflush(f_out);
-					free(buf);
-					buf = NULL;
+					f_out = fopen(OUT_FILE, "a+"); // open output file
+					if (f_out == NULL)
+						err();
 
-					// TODO: send file data back to client
+					fputs(line, f_out); // write line to the file
+					fflush(f_out);		// flush cached write to disk
+					free(line);			// release memory
 
-					fclose(f_fd);
-					f_fd = NULL;
-					fd = 0;
+					{ // read in the entire file and send it back over the socket
+						char buf[BUF_SIZE];
+						size_t n = 0;
+
+						fseek(f_out, 0, SEEK_SET); // start at the beginning
+						while ((n = fread(buf, sizeof(char), BUF_SIZE, f_out)) > 0)
+							send(conn_fd, buf, n, 0);
+						fclose(f_out);
+						f_out = NULL;
+					}
+
+					fclose(f_sock);
+					f_sock = NULL;
+					close(conn_fd);
+					conn_fd = 0;
+					syslog(LOG_INFO, "Closed connection from %s\n", inet_ntoa(addr_in->sin_addr));
 				}
 			}
 			else
